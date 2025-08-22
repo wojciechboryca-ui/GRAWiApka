@@ -116,14 +116,15 @@ const App = () => {
     let auth;
     try {
       // WAŻNE: W środowisku Vercel te zmienne nie są dostępne, musisz je ustawić ręcznie w konfiguracji Vercel.
-      const firebaseConfig = {
-          apiKey: "TWÓJ_KLUCZ_API_Z_FIREBASE",
-          authDomain: "TWÓJ_AUTH_DOMAIN_Z_FIREBASE",
-          projectId: "TWÓJ_PROJECT_ID_Z_FIREBASE",
-          storageBucket: "TWÓJ_STORAGE_BUCKET_Z_FIREBASE",
-          messagingSenderId: "TWÓJ_MESSAGING_SENDER_ID_Z_FIREBASE",
-          appId: "TWÓJ_APP_ID_Z_FIREBASE"
-      };
+     const firebaseConfig = { 
+  apiKey : "AIzaSyDmXVesIeeVgQcdUnucdzCDQYz2QQDXico" , 
+  authDomain : "grawiapka.firebaseapp.com" , 
+  projectId : "grawiapka" , 
+  storageBucket : "grawiapka.firebasestorage.app" , 
+  messagingSenderId : "630484244372" , 
+  Identyfikator aplikacji : "1:630484244372:web:745385625f35b9de056181" , 
+  MeasurementId : "G-GPP6NNHKDY" 
+};
 
       const app = initializeApp(firebaseConfig);
       auth = getAuth(app);
