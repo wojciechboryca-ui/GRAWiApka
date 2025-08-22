@@ -3,19 +3,18 @@ import { initializeApp } from "firebase/app";
 import { 
   getAuth, 
   onAuthStateChanged, 
-  signInWithCustomToken, 
-  signInAnonymously,
+  signInWithEmailAndPassword, 
   signOut 
 } from "firebase/auth";
-import { getFirestore, doc, getDoc, setDoc, deleteDoc } from "firebase/firestore";
+import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
 
-// Main application component
+// Główny komponent aplikacji
 const App = () => {
-  // State to manage views and data
+  // Stan do zarządzania widokami i danymi
   const [screen, setScreen] = useState('home');
   const [selectedUser, setSelectedUser] = useState(null);
   const [users, setUsers] = useState([]);
-  const [allUsers, setAllUsers] = useState([]); // Stores all users regardless of the day
+  const [allUsers, setAllUsers] = useState([]); 
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [selectedFilter, setSelectedFilter] = useState('');
   const [selectedColumn, setSelectedColumn] = useState('');
@@ -38,8 +37,10 @@ const App = () => {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [user, setUser] = useState(null);
   const [db, setDb] = useState(null);
-  
-  // Month index map (from JavaScript Date) to Polish names
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  // Mapa indeksów miesięcy (z JavaScript Date) na polskie nazwy
   const monthIndexToName = {
     8: 'Wrzesień',
     9: 'Październik',
@@ -53,7 +54,7 @@ const App = () => {
     5: 'Czerwiec',
   };
   
-  // Array with the correct month order
+  // Tablica z poprawną kolejnością miesięcy
   const orderedMonths = [
     'Wrzesień',
     'Październik',
@@ -67,24 +68,24 @@ const App = () => {
     'Czerwiec',
   ];
 
-  // Function that sets the default month based on the current date
+  // Funkcja, która ustawia domyślny miesiąc na podstawie bieżącej daty
   const getDefaultMonth = () => {
     const currentMonthIndex = new Date().getMonth();
     return monthIndexToName[currentMonthIndex] || 'Wrzesień';
   };
   
-  // Set the default month on component load
+  // Ustawia domyślny miesiąc po załadowaniu komponentu
   useEffect(() => {
     setSelectedMonth(getDefaultMonth());
   }, []);
   
-  // Data for Google Sheets API connection
+  // Dane do połączenia z Google Sheets API
   const apiKey = "AIzaSyBc3EW9VROqSoe87TP8BLkddM5Vr4BqEJg";
   const sheetId = "1SrX4suFX64c-S6qlqGT5vfY4UW8FQjCy7X9PzoXtKKI";
   const appsScriptUrl = "https://script.google.com/macros/s/AKfycbzpCiPB4gKCnQiDg1ZUot5H_HBUrFYn6j0phHBkEtJa0-kcnX4nH4cw-G_PUJphlQpNCg/exec";
   const proxyScriptUrl = "https://script.google.com/macros/s/AKfycbyAtlYdp9ImSRHELyJfdC2yVZUREM1JdW50V0ZKlTQG0jSgsW3d4sA1w9WuSVUAVOUAiP/exec"; 
   
-  // Updated data range to include Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, and Sunday
+  // Zaktualizowany zakres danych, aby uwzględnić Poniedziałek, Wtorek, Środę, Czwartek, Piątek, Sobotę i Niedzielę
   const range = "Baza danych!A:BH"; 
 
   const dayRanges = {
@@ -110,11 +111,20 @@ const App = () => {
     'Czerwiec': 'BH',
   };
   
-  // Firebase initialization and auth state listener
+  // Inicjalizacja Firebase i nasłuchiwanie na zmiany stanu uwierzytelniania
   useEffect(() => {
     let auth;
     try {
-      const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+      // WAŻNE: W środowisku Vercel te zmienne nie są dostępne, musisz je ustawić ręcznie w konfiguracji Vercel.
+      const firebaseConfig = {
+          apiKey: "TWÓJ_KLUCZ_API_Z_FIREBASE",
+          authDomain: "TWÓJ_AUTH_DOMAIN_Z_FIREBASE",
+          projectId: "TWÓJ_PROJECT_ID_Z_FIREBASE",
+          storageBucket: "TWÓJ_STORAGE_BUCKET_Z_FIREBASE",
+          messagingSenderId: "TWÓJ_MESSAGING_SENDER_ID_Z_FIREBASE",
+          appId: "TWÓJ_APP_ID_Z_FIREBASE"
+      };
+
       const app = initializeApp(firebaseConfig);
       auth = getAuth(app);
       setDb(getFirestore(app));
@@ -127,16 +137,17 @@ const App = () => {
       return () => unsubscribe();
     } catch (error) {
       console.error("Firebase initialization failed:", error);
-      setError("Firebase initialization failed. Please try again later.");
+      setError("Inicjalizacja Firebase nie powiodła się. Sprawdź konfigurację.");
     }
   }, []);
   
-  // New useEffect to check user authorization after sign-in
+  // Nowy useEffect do sprawdzania autoryzacji użytkownika po zalogowaniu
   useEffect(() => {
     const checkAuthorization = async () => {
       if (user && db) {
         try {
-          const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+          // Identyfikator aplikacji jest potrzebny do poprawnego odczytania danych
+          const appId = 'app-prototype'; // Domyślna wartość
           const userDocRef = doc(db, `artifacts/${appId}/public/data/teachers`, user.uid);
           const userDocSnap = await getDoc(userDocRef);
           
@@ -161,34 +172,33 @@ const App = () => {
     }
   }, [isAuthReady, user, db]);
   
-  // Handle sign-in using the custom token
-  const handleSignIn = async () => {
-    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+  // OBSŁUGA LOGOWANIA: teraz używa e-mail i hasła
+  const handleSignIn = async (e) => {
+    e.preventDefault();
     const auth = getAuth();
     setError(null);
-    if (initialAuthToken) {
-      try {
-        await signInWithCustomToken(auth, initialAuthToken);
-      } catch (error) {
-        console.error("Error signing in with custom token:", error);
-        setError("Błąd logowania. Spróbuj odświeżyć stronę.");
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      console.error("Error signing in with email and password:", error);
+      let errorMessage = "Błąd logowania. Sprawdź e-mail i hasło.";
+      if (error.code === 'auth/wrong-password') {
+        errorMessage = "Błędne hasło. Spróbuj ponownie.";
+      } else if (error.code === 'auth/user-not-found') {
+        errorMessage = "Użytkownik nie istnieje.";
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = "Nieprawidłowy adres e-mail.";
       }
-    } else {
-       try {
-        await signInAnonymously(auth);
-      } catch (error) {
-        console.error("Error signing in anonymously:", error);
-        setError("Błąd logowania anonimowego. Spróbuj odświeżyć stronę.");
-      }
+      setError(errorMessage);
     }
   };
   
-  // Handle sign-out
+  // Obsługa wylogowania
   const handleSignOut = async () => {
     const auth = getAuth();
     try {
       await signOut(auth);
-      // Clear all state after sign out
+      // Czyści cały stan po wylogowaniu
       setScreen('home');
       setSelectedUser(null);
       setUsers([]);
@@ -209,11 +219,11 @@ const App = () => {
     }
   };
 
-  // New function to add the current user to the authorized teachers list in Firestore
+  // Funkcja do dodawania bieżącego użytkownika do listy autoryzowanych nauczycieli w Firestore
   const authorizeCurrentUser = async () => {
     if (!user || !db) return;
     try {
-      const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+      const appId = 'app-prototype';
       const userDocRef = doc(db, `artifacts/${appId}/public/data/teachers`, user.uid);
       await setDoc(userDocRef, { authorized: true, createdAt: new Date() });
       setIsAuthorized(true);
@@ -225,7 +235,7 @@ const App = () => {
     }
   };
 
-  // Function to fetch data from the Google Sheets API
+  // Funkcja do pobierania danych z Google Sheets API
   const fetchSheetData = async () => {
     setIsLoading(true);
     setError(null);
@@ -249,7 +259,7 @@ const App = () => {
     }
   };
 
-  // Use useEffect to process data when the day or raw data changes
+  // Używa useEffect do przetwarzania danych, gdy zmienia się dzień lub surowe dane
   useEffect(() => {
     if(selectedDay) {
         processDataForDay();
@@ -257,7 +267,7 @@ const App = () => {
     processAllUsers();
   }, [rawSheetData, selectedDay]);
 
-  // NEW FUNCTION: Processes user data for the selected day
+  // Przetwarza dane użytkownika dla wybranego dnia
   const processDataForDay = () => {
     if (!rawSheetData.length || !selectedDay || !dayRanges[selectedDay]) {
       setUsers([]);
@@ -289,7 +299,7 @@ const App = () => {
     setUsers(parsedUsers);
   };
   
-  // NEW FUNCTION: Processes all users from column A
+  // Przetwarza wszystkich użytkowników z kolumny A
   const processAllUsers = () => {
     if (!rawSheetData.length) {
       setAllUsers([]);
@@ -314,7 +324,7 @@ const App = () => {
     setAllUsers(allParsedUsers);
   };
 
-  // NEW LOGIC: Search debouncing
+  // Opóźnianie wyszukiwania (debouncing)
   useEffect(() => {
     const timerId = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery);
@@ -325,7 +335,7 @@ const App = () => {
     };
   }, [searchQuery]);
 
-  // FILTERING HANDLER: Search has the highest priority
+  // OBSŁUGA FILTROWANIA: Wyszukiwanie ma najwyższy priorytet
   useEffect(() => {
     let tempFilteredUsers = [];
     
@@ -344,14 +354,14 @@ const App = () => {
     setFilteredUsers(tempFilteredUsers);
   }, [debouncedSearchQuery, selectedDay, selectedColumn, selectedFilter, users, allUsers]);
 
-  // Handle change in the sessions dropdown
+  // Obsługa zmiany w menu rozwijanym 'Zajęcia'
   const handleColumnChange = (event) => {
     setSelectedColumn(event.target.value);
     setSelectedFilter('');
     setShowAddParticipantForm(false);
   };
 
-  // Handle change in the day dropdown
+  // Obsługa zmiany w menu rozwijanym 'Dzień'
   const handleDayChange = (event) => {
     setSelectedDay(event.target.value);
     setSelectedColumn('');
@@ -528,8 +538,7 @@ const App = () => {
     }
   };
   
-  // NEW: Use useMemo to memoize the list of headers and filter options
-  // This logic is currently not used but kept for potential future use.
+  // Lista nagłówków i opcji filtrowania
   const daySpecificHeaders = getNonEmptyHeadersForSelectedDay();
   const filterOptions = getFilterOptions(selectedColumn);
 
@@ -539,12 +548,30 @@ const App = () => {
         <div className="bg-white p-10 rounded-2xl shadow-lg text-center max-w-sm w-full">
           <h1 className="text-3xl font-bold mb-4 text-gray-800">Witaj!</h1>
           <p className="text-gray-600 mb-6">Aby korzystać z aplikacji, musisz się zalogować.</p>
-          <button
-            onClick={handleSignIn}
-            className="w-full bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl shadow-md hover:bg-indigo-700 transition-colors duration-200"
-          >
-            Zaloguj
-          </button>
+          <form onSubmit={handleSignIn} className="space-y-4">
+            <input
+              type="email"
+              placeholder="Adres e-mail"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              required
+            />
+            <input
+              type="password"
+              placeholder="Hasło"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              required
+            />
+            <button
+              type="submit"
+              className="w-full bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl shadow-md hover:bg-indigo-700 transition-colors duration-200"
+            >
+              Zaloguj
+            </button>
+          </form>
           {error && <p className="text-red-500 mt-4">{error}</p>}
         </div>
       </div>
@@ -732,7 +759,7 @@ const App = () => {
                     onClick={() => {
                       setSelectedUser(user);
                       setScreen('details');
-                      // Clear the attendance message when a new user is selected
+                      // Czyści komunikat o obecności po wybraniu nowego użytkownika
                       setAttendanceMessage(null); 
                     }}
                   >
@@ -822,7 +849,7 @@ const App = () => {
             className="text-indigo-600 hover:text-indigo-800 transition-colors duration-200"
             onClick={() => {
               setScreen('home');
-              // Clear the attendance message when navigating back to the home screen
+              // Czyści komunikat o obecności podczas powrotu do ekranu głównego
               setAttendanceMessage(null);
             }}
           >
