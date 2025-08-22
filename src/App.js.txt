@@ -1,45 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { initializeApp } from "firebase/app";
-import { 
-  getAuth, 
-  onAuthStateChanged, 
-  signInWithEmailAndPassword, 
-  signOut 
-} from "firebase/auth";
-import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
 
 // Główny komponent aplikacji
 const App = () => {
-  // Stan do zarządzania widokami i danymi
-  const [screen, setScreen] = useState('home');
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [users, setUsers] = useState([]);
-  const [allUsers, setAllUsers] = useState([]); 
-  const [filteredUsers, setFilteredUsers] = useState([]);
-  const [selectedFilter, setSelectedFilter] = useState('');
-  const [selectedColumn, setSelectedColumn] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [rawSheetData, setRawSheetData] = useState([]);
-  const [columnHeaders, setColumnHeaders] = useState([]);
-  const [selectedDay, setSelectedDay] = useState('');
-  const [attendanceMessage, setAttendanceMessage] = useState(null);
-  const [userCooldowns, setUserCooldowns] = useState({});
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
-  const newParticipantRef = useRef(null);
-  const [showAddParticipantForm, setShowAddParticipantForm] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState('');
-  const [pendingAttendanceTimers, setPendingAttendanceTimers] = useState({});
-  const [isGroupDropdownOpen, setIsGroupDropdownOpen] = useState(false);
-  const [userCountdowns, setUserCountdowns] = useState({});
-  const [isAuthReady, setIsAuthReady] = useState(false);
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [user, setUser] = useState(null);
-  const [db, setDb] = useState(null);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-
   // Mapa indeksów miesięcy (z JavaScript Date) na polskie nazwy
   const monthIndexToName = {
     8: 'Wrzesień',
@@ -54,7 +16,7 @@ const App = () => {
     5: 'Czerwiec',
   };
   
-  // Tablica z poprawną kolejnością miesięcy
+  // NOWA TABLICA Z POPRAWNĄ KOLEJNOŚCIĄ MIESIĘCY
   const orderedMonths = [
     'Wrzesień',
     'Październik',
@@ -68,26 +30,57 @@ const App = () => {
     'Czerwiec',
   ];
 
-  // Funkcja, która ustawia domyślny miesiąc na podstawie bieżącej daty
+  // Funkcja, która ustala domyślny miesiąc na podstawie bieżącej daty
   const getDefaultMonth = () => {
     const currentMonthIndex = new Date().getMonth();
+    // Zwróć polską nazwę miesiąca lub 'Wrzesień' jako wartość domyślną, jeśli nie ma dopasowania
     return monthIndexToName[currentMonthIndex] || 'Wrzesień';
   };
   
-  // Ustawia domyślny miesiąc po załadowaniu komponentu
-  useEffect(() => {
-    setSelectedMonth(getDefaultMonth());
-  }, []);
+  // Stan do zarządzania widokami i danymi
+  const [screen, setScreen] = useState('home');
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]); // Przechowuje wszystkich użytkowników, niezależnie od dnia
+  const [filteredUsers, setFilteredUsers] = useState([]);
+  const [selectedFilter, setSelectedFilter] = useState('');
+  const [selectedColumn, setSelectedColumn] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  // Stan do przechowywania surowych danych z arkusza
+  const [rawSheetData, setRawSheetData] = useState([]);
+  // Stan do przechowywania nagłówków kolumn z arkusza
+  const [columnHeaders, setColumnHeaders] = useState([]);
+  // Stan do przechowywania wybranego dnia tygodnia
+  const [selectedDay, setSelectedDay] = useState('');
+  const [attendanceMessage, setAttendanceMessage] = useState(null);
+  // Przechowuje czasy ostatniego kliknięcia dla KAŻDEGO użytkownika
+  const [userCooldowns, setUserCooldowns] = useState({});
+  // Stan dla zapytania wyszukiwania
+  const [searchQuery, setSearchQuery] = useState('');
+  // NOWY STAN: Wartość wyszukiwania po odczekaniu (debouncing)
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  // Nowa referencja dla dodawania uczestnika spoza bazy
+  const newParticipantRef = useRef(null);
+  // Nowy stan do kontrolowania widoczności formularza dodawania uczestnika
+  const [showAddParticipantForm, setShowAddParticipantForm] = useState(false);
+  // Przechowuje wybrany miesiąc do sprawdzania abonamentu
+  const [selectedMonth, setSelectedMonth] = useState(getDefaultMonth());
+  // Przechowuje timery dla obecności, które czekają na zapis
+  const [pendingAttendanceTimers, setPendingAttendanceTimers] = useState({});
   
-  // Dane do połączenia z Google Sheets API
+  // Dane do połączenia z Google Sheets API.
   const apiKey = "AIzaSyBc3EW9VROqSoe87TP8BLkddM5Vr4BqEJg";
   const sheetId = "1SrX4suFX64c-S6qlqGT5vfY4UW8FQjCy7X9PzoXtKKI";
-  const appsScriptUrl = "https://script.google.com/macros/s/AKfycbzpCiPB4gKCnQiDg1ZUot5H_HBUrFYn6j0phHBkEtJa0-kcnX4nH4cw-G_PUJphlQpNCg/exec";
-  const proxyScriptUrl = "https://script.google.com/macros/s/AKfycbyAtlYdp9ImSRHELyJfdC2yVZUREM1JdW50V0ZKlTQG0jSgsW3d4sA1w9WuSVUAVOUAiP/exec"; 
+  const attendanceSheetId = "1PurAUxkAw_JG1HRM-Ay-18ctryVO31nTmjePm2Lm78"; 
+  const appsScriptUrl = "https://script.google.com/macros/s/AKfycbzpCiPB4gKCnQiDg1ZUot5H_HBUrFYn6j0phHBkEtJa0-kcnX4nH4cw_G_PUJphlQpNCg/exec";
+  const proxyScriptUrl = "https://script.google.com/macros/s/AKfycbyAtlYdp9ImSRHELyJfdC2yVZUREM1JdW50V0ZKlTQG0jSgsW3d4sA1w9WuSVUAVOUAiQ/exec"; 
   
-  // Zaktualizowany zakres danych, aby uwzględnić Poniedziałek, Wtorek, Środę, Czwartek, Piątek, Sobotę i Niedzielę
+  // Zaktualizowany zakres danych obejmujący Poniedziałek, Wtorek, Środa, Czwartek, Piątek, Sobotę i Niedzielę
+  // WAŻNA ZMIANA: Zakres danych został rozszerzony do kolumny BH, aby uwzględnić wszystkie miesiące
   const range = "Baza danych!A:BH"; 
 
+  // Mapowanie dni tygodnia na zakresy indeksów kolumn, włącznie z indeksem dla kolumny z nazwiskami
   const dayRanges = {
     'Poniedziałek': { nameIndex: 0, dataRange: [1, 6] },
     'Wtorek': { nameIndex: 7, dataRange: [8, 13] },
@@ -98,6 +91,7 @@ const App = () => {
     'Niedziela': { nameIndex: 42, dataRange: [43, 48] },
   };
 
+  // Mapa miesięcy i ich kolumn, podana przez Ciebie
   const monthColumns = {
     'Wrzesień': 'AY',
     'Październik': 'AZ',
@@ -110,133 +104,8 @@ const App = () => {
     'Maj': 'BG',
     'Czerwiec': 'BH',
   };
-  
-  // Inicjalizacja Firebase i nasłuchiwanie na zmiany stanu uwierzytelniania
-  useEffect(() => {
-    let auth;
-    try {
-      // WAŻNE: W środowisku Vercel te zmienne nie są dostępne, musisz je ustawić ręcznie w konfiguracji Vercel.
-     const firebaseConfig = { 
-  apiKey : "AIzaSyDmXVesIeeVgQcdUnucdzCDQYz2QQDXico" , 
-  authDomain : "grawiapka.firebaseapp.com" , 
-  projectId : "grawiapka" , 
-  storageBucket : "grawiapka.firebasestorage.app" , 
-  messagingSenderId : "630484244372" , 
-  Identyfikator aplikacji : "1:630484244372:web:745385625f35b9de056181" , 
-  MeasurementId : "G-GPP6NNHKDY" 
-};
 
-      const app = initializeApp(firebaseConfig);
-      auth = getAuth(app);
-      setDb(getFirestore(app));
-
-      const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-        setUser(currentUser);
-        setIsAuthReady(true);
-      });
-      
-      return () => unsubscribe();
-    } catch (error) {
-      console.error("Firebase initialization failed:", error);
-      setError("Inicjalizacja Firebase nie powiodła się. Sprawdź konfigurację.");
-    }
-  }, []);
-  
-  // Nowy useEffect do sprawdzania autoryzacji użytkownika po zalogowaniu
-  useEffect(() => {
-    const checkAuthorization = async () => {
-      if (user && db) {
-        try {
-          // Identyfikator aplikacji jest potrzebny do poprawnego odczytania danych
-          const appId = 'app-prototype'; // Domyślna wartość
-          const userDocRef = doc(db, `artifacts/${appId}/public/data/teachers`, user.uid);
-          const userDocSnap = await getDoc(userDocRef);
-          
-          if (userDocSnap.exists()) {
-            setIsAuthorized(true);
-            fetchSheetData();
-          } else {
-            setIsAuthorized(false);
-            setIsLoading(false);
-          }
-        } catch (err) {
-          console.error("Authorization check failed:", err);
-          setError("Błąd podczas weryfikacji dostępu.");
-          setIsAuthorized(false);
-          setIsLoading(false);
-        }
-      }
-    };
-
-    if (isAuthReady) {
-      checkAuthorization();
-    }
-  }, [isAuthReady, user, db]);
-  
-  // OBSŁUGA LOGOWANIA: teraz używa e-mail i hasła
-  const handleSignIn = async (e) => {
-    e.preventDefault();
-    const auth = getAuth();
-    setError(null);
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (error) {
-      console.error("Error signing in with email and password:", error);
-      let errorMessage = "Błąd logowania. Sprawdź e-mail i hasło.";
-      if (error.code === 'auth/wrong-password') {
-        errorMessage = "Błędne hasło. Spróbuj ponownie.";
-      } else if (error.code === 'auth/user-not-found') {
-        errorMessage = "Użytkownik nie istnieje.";
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = "Nieprawidłowy adres e-mail.";
-      }
-      setError(errorMessage);
-    }
-  };
-  
-  // Obsługa wylogowania
-  const handleSignOut = async () => {
-    const auth = getAuth();
-    try {
-      await signOut(auth);
-      // Czyści cały stan po wylogowaniu
-      setScreen('home');
-      setSelectedUser(null);
-      setUsers([]);
-      setAllUsers([]);
-      setFilteredUsers([]);
-      setSelectedFilter('');
-      setSelectedColumn('');
-      setAttendanceMessage(null);
-      setUserCooldowns({});
-      setSearchQuery('');
-      setDebouncedSearchQuery('');
-      setPendingAttendanceTimers({});
-      setUserCountdowns({});
-      setIsAuthorized(false);
-    } catch (error) {
-      console.error("Error signing out:", error);
-      setError("Błąd wylogowania.");
-    }
-  };
-
-  // Funkcja do dodawania bieżącego użytkownika do listy autoryzowanych nauczycieli w Firestore
-  const authorizeCurrentUser = async () => {
-    if (!user || !db) return;
-    try {
-      const appId = 'app-prototype';
-      const userDocRef = doc(db, `artifacts/${appId}/public/data/teachers`, user.uid);
-      await setDoc(userDocRef, { authorized: true, createdAt: new Date() });
-      setIsAuthorized(true);
-      fetchSheetData();
-      setError(null);
-    } catch (err) {
-      console.error("Error authorizing user:", err);
-      setError("Nie udało się autoryzować. Spróbuj ponownie.");
-    }
-  };
-
-  // Funkcja do pobierania danych z Google Sheets API
+  // Funkcja pobierająca dane z Google Sheets API
   const fetchSheetData = async () => {
     setIsLoading(true);
     setError(null);
@@ -248,27 +117,25 @@ const App = () => {
       if (data.error) {
         setError(`Błąd API: ${data.error.message}. Sprawdź, czy klucz API ma uprawnienia do Google Sheets API i czy arkusz jest publicznie dostępny.`);
       } else if (data.values && data.values.length > 0) {
+        // Zapisz surowe dane
         setRawSheetData(data.values);
       } else {
         setError("Błąd podczas ładowania danych. Upewnij się, że ID arkusza i klucz API są poprawne oraz że arkusz nie jest pusty.");
       }
     } catch (err) {
-      console.error("Failed to fetch data:", err);
+      console.error("Nie udało się pobrać danych:", err);
       setError("Nie udało się pobrać danych. Sprawdź połączenie z internetem lub klucz API.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Używa useEffect do przetwarzania danych, gdy zmienia się dzień lub surowe dane
+  // Użyj useEffect, aby pobrać dane tylko raz po załadowaniu komponentu
   useEffect(() => {
-    if(selectedDay) {
-        processDataForDay();
-    }
-    processAllUsers();
-  }, [rawSheetData, selectedDay]);
+    fetchSheetData();
+  }, []);
 
-  // Przetwarza dane użytkownika dla wybranego dnia
+  // NOWA FUNKCJA: Przetwarza dane użytkowników dla wybranego dnia
   const processDataForDay = () => {
     if (!rawSheetData.length || !selectedDay || !dayRanges[selectedDay]) {
       setUsers([]);
@@ -283,15 +150,17 @@ const App = () => {
     const rows = rawSheetData.slice(1);
     const parsedUsers = rows.map((row, index) => {
       const user = {
+        // Ważne: ID jest teraz zawsze oparte na indeksie wiersza w surowych danych
         id: index, 
         name: row[nameIndex] || '',
-        rowData: row
+        rowData: row // Dodaj cały wiersz danych, aby móc go użyć później
       };
       headers.forEach((header, colIndex) => {
         user[header] = row[dataRange[0] + colIndex] || '';
       });
       return user;
     }).filter(user => {
+      // Sprawdź, czy użytkownik ma imię ORAZ czy ma jakieś dane dla wybranego dnia
       const hasName = user.name.trim() !== '';
       const hasDataForDay = headers.some(header => user[header] && user[header].trim() !== '');
       return hasName && hasDataForDay;
@@ -300,7 +169,7 @@ const App = () => {
     setUsers(parsedUsers);
   };
   
-  // Przetwarza wszystkich użytkowników z kolumny A
+  // NOWA FUNKCJA: Przetwarza wszystkich użytkowników z kolumny A
   const processAllUsers = () => {
     if (!rawSheetData.length) {
       setAllUsers([]);
@@ -314,6 +183,7 @@ const App = () => {
     rows.forEach((row, index) => {
       const name = row[nameColumnIndex];
       if (name && name.trim() !== '') {
+        // Ważne: ID jest teraz zawsze oparte na indeksie wiersza w surowych danych
         allParsedUsers.push({
           id: index, 
           name: name,
@@ -325,57 +195,81 @@ const App = () => {
     setAllUsers(allParsedUsers);
   };
 
-  // Opóźnianie wyszukiwania (debouncing)
+  // Użyj useEffect, aby przetworzyć dane, gdy zmieni się dzień lub surowe dane
   useEffect(() => {
+    if(selectedDay) {
+        processDataForDay();
+    }
+    processAllUsers();
+  }, [rawSheetData, selectedDay]);
+
+  // NOWA LOGIKA: Debouncing wyszukiwania
+  useEffect(() => {
+    // Ustaw timer, który zaktualizuje debouncedSearchQuery po 300 ms
     const timerId = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery);
     }, 300);
 
+    // Funkcja czyszcząca - uruchamiana przy każdym kolejnym wciśnięciu klawisza lub odmontowaniu
     return () => {
       clearTimeout(timerId);
     };
-  }, [searchQuery]);
+  }, [searchQuery]); // Efekt uruchamia się przy każdej zmianie searchQuery
 
   // OBSŁUGA FILTROWANIA: Wyszukiwanie ma najwyższy priorytet
   useEffect(() => {
     let tempFilteredUsers = [];
     
+    // Jeśli jest zapytanie wyszukiwania, przeszukuj całą bazę (`allUsers`)
     if (debouncedSearchQuery) {
       tempFilteredUsers = allUsers.filter(user =>
         user.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
       );
     } else if (selectedColumn && selectedFilter) {
+      // Jeśli wybrano grupę i zajęcia, filtruj na podstawie tych wartości
       tempFilteredUsers = users.filter(user =>
         user[selectedColumn] && user[selectedColumn].split(',').map(s => s.trim()).includes(selectedFilter)
       );
     } else {
+        // Jeśli nie ma wyszukiwania ani wybranej grupy, lista jest pusta
         tempFilteredUsers = [];
     }
     
     setFilteredUsers(tempFilteredUsers);
   }, [debouncedSearchQuery, selectedDay, selectedColumn, selectedFilter, users, allUsers]);
 
-  // Obsługa zmiany w menu rozwijanym 'Zajęcia'
+  // Obsługa zmiany w liście rozwijanej grupy
+  const handleFilterChange = (event) => {
+    setSelectedFilter(event.target.value);
+    // Usunięto: setSearchQuery('');
+    setShowAddParticipantForm(false); // Ukryj formularz
+  };
+
+  // Obsługa zmiany w liście rozwijanej zajęć
   const handleColumnChange = (event) => {
     setSelectedColumn(event.target.value);
     setSelectedFilter('');
-    setShowAddParticipantForm(false);
+    // Usunięto: setSearchQuery('');
+    setShowAddParticipantForm(false); // Ukryj formularz
   };
 
-  // Obsługa zmiany w menu rozwijanym 'Dzień'
+  // Obsługa zmiany w liście rozwijanej dnia
   const handleDayChange = (event) => {
     setSelectedDay(event.target.value);
     setSelectedColumn('');
     setSelectedFilter('');
-    setShowAddParticipantForm(false);
+    // Usunięto: setSearchQuery('');
+    setShowAddParticipantForm(false); // Ukryj formularz
   };
 
+  // Zaktualizowana funkcja pobierająca unikalne wartości dla drugiej listy rozwijanej
   const getFilterOptions = (column) => {
     if (!column || !users.length) return [];
     const options = new Set();
     users.forEach(user => {
       const cellValue = user[column];
       if (cellValue) {
+        // Podziel wartość komórki po przecinku i dodaj każdy symbol oddzielnie
         cellValue.split(',').forEach(symbol => {
           const trimmedSymbol = symbol.trim();
           if (trimmedSymbol) {
@@ -387,28 +281,31 @@ const App = () => {
     return [...options];
   };
 
+  // Funkcja pobierająca nagłówki kolumn, które mają jakieś dane dla wybranego dnia
   const getNonEmptyHeadersForSelectedDay = () => {
     return columnHeaders.filter(header => {
       return users.some(user => user[header] && user[header].trim() !== '');
     });
   };
   
+  // Funkcja do zwracania koloru w zależności od pierwszej litery symbolu
   const getBackgroundColor = (symbol) => {
     const firstLetter = symbol.trim().charAt(0).toUpperCase();
     switch (firstLetter) {
       case 'F':
-        return 'bg-purple-500';
+        return 'bg-purple-500'; // Fioletowy
       case 'N':
-        return 'bg-blue-500';
+        return 'bg-blue-500'; // Niebieski
       case 'Z':
-        return 'bg-green-500';
+        return 'bg-green-500'; // Zielony
       case 'P':
-        return 'bg-transparent';
+        return 'bg-transparent'; // Neutralny, bez tła
       default:
-        return 'bg-yellow-400';
+        return 'bg-yellow-400'; // Żółty dla pozostałych
     }
   };
 
+  // Zmieniona funkcja - teraz przyjmuje użytkownika jako argument
   const recordAttendance = (user) => {
     if (!user) {
       setAttendanceMessage({ type: 'error', text: 'Błąd: Uczestnik nie jest wybrany.' });
@@ -418,36 +315,20 @@ const App = () => {
     const isPending = pendingAttendanceTimers[user.id];
     
     if (isPending) {
+      // 2) Jeśli kliknięto ponownie w ciągu 5 sekund, anuluj wysyłanie
       clearTimeout(isPending);
       setPendingAttendanceTimers(prev => {
         const newTimers = { ...prev };
         delete newTimers[user.id];
         return newTimers;
       });
-      setUserCountdowns(prev => {
-        const newCountdowns = { ...prev };
-        delete newCountdowns[user.id];
-        return newCountdowns;
-      });
       setAttendanceMessage({ type: 'info', text: `Zapis obecności dla ${user.name} został anulowany.` });
     } else {
+      // 1) Kliknięcie od razu wywołuje status "Obecny" i rozpoczyna 5-sekundowe odliczanie
       setAttendanceMessage({ type: 'success', text: `Obecność dla ${user.name} zostanie zapisana za 5 sekund.` });
       
-      setUserCountdowns(prev => ({ ...prev, [user.id]: 5 }));
-
-      const intervalId = setInterval(() => {
-        setUserCountdowns(prev => {
-          const newCountdowns = { ...prev };
-          newCountdowns[user.id] -= 1;
-          if (newCountdowns[user.id] <= 0) {
-            clearInterval(intervalId);
-            delete newCountdowns[user.id];
-          }
-          return newCountdowns;
-        });
-      }, 1000);
-
       const timerId = setTimeout(async () => {
+        // 3) Jeśli w ciągu 5 sekund nie nastąpi ponowne kliknięcie, wyślij dane
         
         const now = new Date().getTime();
         const searchMarker = debouncedSearchQuery ? 'Wyszukano' : '';
@@ -465,14 +346,15 @@ const App = () => {
           const response = await fetch(url);
           if (!response.ok) {
             const errorText = await response.text();
-            console.error('Attendance record error:', errorText);
+            console.error('Błąd zapisu obecności:', errorText);
             setAttendanceMessage({ type: 'error', text: `Nie udało się zapisać obecności. Kod błędu: ${response.status}. Szczegóły: ${errorText}.` });
           } else {
+            // Zaktualizuj stan po udanym zapisie
             setAttendanceMessage({ type: 'success', text: `Obecność dla ${user.name} została zapisana!` });
             setUserCooldowns(prev => ({ ...prev, [user.id]: now }));
           }
         } catch (error) {
-          console.error('Attendance record error:', error);
+          console.error('Błąd zapisu obecności:', error);
           setAttendanceMessage({ type: 'error', text: 'Wystąpił błąd podczas zapisywania obecności. Sprawdź połączenie z internetem.' });
         } finally {
           setPendingAttendanceTimers(prev => {
@@ -480,25 +362,23 @@ const App = () => {
             delete newTimers[user.id];
             return newTimers;
           });
-          setUserCountdowns(prev => {
-            const newCountdowns = { ...prev };
-            delete newCountdowns[user.id];
-            return newCountdowns;
-          });
         }
-      }, 5000);
+      }, 5000); // 5 sekund
       
       setPendingAttendanceTimers(prev => ({ ...prev, [user.id]: timerId }));
     }
   };
 
+  // Nowa funkcja do dodawania nowego uczestnika spoza bazy
   const recordNewParticipantAttendance = async () => {
+    // Pobierz wartość z referencji
     const newParticipantName = newParticipantRef.current.value.trim();
     if (!newParticipantName) {
       setAttendanceMessage({ type: 'error', text: 'Wpisz imię i nazwisko nowego uczestnika.' });
       return;
     }
     
+    // Upewnij się, że wybrano dzień, zajęcia i grupę
     if (!selectedDay || !selectedColumn || !selectedFilter) {
       setAttendanceMessage({ type: 'error', text: 'Musisz wybrać Dzień, Zajęcia i Grupę.' });
       return;
@@ -509,11 +389,12 @@ const App = () => {
       selectedDay,
       selectedColumn,
       selectedFilter,
-      'NOWY',
+      'NOWY', // Specjalny znacznik
       new Date().toISOString()
     ];
     
     try {
+      // Wyświetl natychmiastowy komunikat o sukcesie
       setAttendanceMessage({ type: 'success', text: `Obecność dla ${newParticipantName} została zapisana!` });
       
       const url = `${proxyScriptUrl}?url=${encodeURIComponent(appsScriptUrl)}&data=${encodeURIComponent(JSON.stringify(dataToSave))}`;
@@ -521,92 +402,23 @@ const App = () => {
         .then(response => {
           if (!response.ok) {
             response.text().then(errorText => {
-              console.error('Attendance record error:', errorText);
+              console.error('Błąd zapisu obecności:', errorText);
               setAttendanceMessage({ type: 'error', text: `Nie udało się zapisać obecności. Kod błędu: ${response.status}. Szczegóły: ${errorText}.` });
             });
           } else {
-            newParticipantRef.current.value = '';
-            setShowAddParticipantForm(false);
+            newParticipantRef.current.value = ''; // Wyczyść pole po udanym zapisie
+            setShowAddParticipantForm(false); // Ukryj formularz po udanym zapisie
           }
         })
         .catch(error => {
-          console.error('Attendance record error:', error);
+          console.error('Błąd zapisu obecności:', error);
           setAttendanceMessage({ type: 'error', text: 'Wystąpił błąd podczas zapisywania obecności. Sprawdź połączenie z internetem.' });
         });
     } catch (error) {
-      console.error('Attendance record error:', error);
+      console.error('Błąd zapisu obecności:', error);
       setAttendanceMessage({ type: 'error', text: 'Wystąpił błąd podczas zapisywania obecności. Sprawdź połączenie z internetem lub poprawność adresu URL.' });
     }
   };
-  
-  // Lista nagłówków i opcji filtrowania
-  const daySpecificHeaders = getNonEmptyHeadersForSelectedDay();
-  const filterOptions = getFilterOptions(selectedColumn);
-
-  const LoginScreen = () => {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen bg-gray-100 p-6">
-        <div className="bg-white p-10 rounded-2xl shadow-lg text-center max-w-sm w-full">
-          <h1 className="text-3xl font-bold mb-4 text-gray-800">Witaj!</h1>
-          <p className="text-gray-600 mb-6">Aby korzystać z aplikacji, musisz się zalogować.</p>
-          <form onSubmit={handleSignIn} className="space-y-4">
-            <input
-              type="email"
-              placeholder="Adres e-mail"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-              required
-            />
-            <input
-              type="password"
-              placeholder="Hasło"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-              required
-            />
-            <button
-              type="submit"
-              className="w-full bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl shadow-md hover:bg-indigo-700 transition-colors duration-200"
-            >
-              Zaloguj
-            </button>
-          </form>
-          {error && <p className="text-red-500 mt-4">{error}</p>}
-        </div>
-      </div>
-    );
-  };
-
-  const UnauthorizedScreen = () => {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen bg-gray-100 p-6 text-center">
-        <div className="bg-white p-10 rounded-2xl shadow-lg max-w-md w-full">
-          <h1 className="text-3xl font-bold text-red-600 mb-4">Brak dostępu</h1>
-          <p className="text-gray-600 mb-6">Twoje konto nie zostało autoryzowane do korzystania z tej aplikacji.</p>
-          <p className="text-gray-600 mb-8">
-            Twój identyfikator użytkownika (UID):<br/>
-            <span className="font-mono bg-gray-200 p-2 rounded-lg text-sm break-all">{user.uid}</span>
-          </p>
-          <button
-            onClick={authorizeCurrentUser}
-            className="w-full bg-green-600 text-white font-bold py-3 px-6 rounded-xl shadow-md hover:bg-green-700 transition-colors duration-200"
-          >
-            Dodaj mnie jako nauczyciela (tylko do celów testowych)
-          </button>
-          <button
-            onClick={handleSignOut}
-            className="w-full mt-4 bg-red-500 text-white font-bold py-3 px-6 rounded-xl shadow-md hover:bg-red-600 transition-colors duration-200"
-          >
-            Wyloguj
-          </button>
-          {error && <p className="text-red-500 mt-4">{error}</p>}
-        </div>
-      </div>
-    );
-  };
-
 
   const HomeScreen = () => {
     if (isLoading) {
@@ -624,21 +436,19 @@ const App = () => {
         </div>
       );
     }
+
+    const daySpecificHeaders = getNonEmptyHeadersForSelectedDay();
+    const filterOptions = getFilterOptions(selectedColumn);
     
+    // ZMIENIONA LOGIKA: Pokaż listę użytkowników tylko, gdy wybrana jest grupa lub trwa wyszukiwanie
     const shouldShowUsersList = selectedFilter || searchQuery;
 
     return (
       <div className="p-8 space-y-6">
-        <div className="flex justify-between items-center mb-6">
-            <h1 className="text-4xl font-extrabold text-gray-800">Uczestnicy zajęć</h1>
-            <button
-              onClick={handleSignOut}
-              className="bg-red-500 text-white font-bold py-2 px-4 rounded-xl shadow-md hover:bg-red-600 transition-colors duration-200"
-            >
-              Wyloguj
-            </button>
-        </div>
+        <h1 className="text-4xl font-extrabold text-center text-gray-800 mb-6">Uczestnicy zajęć</h1>
         
+        {/* NOWY UKŁAD PRZYCISKÓW */}
+        {/* Przycisk Dzień */}
         <div className="flex flex-col space-y-2 w-full mb-4">
           <label className="text-gray-600 font-semibold">Dzień</label>
           <select
@@ -653,6 +463,7 @@ const App = () => {
           </select>
         </div>
         
+        {/* Przyciski Zajęcia i Grupa */}
         <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4 mb-4">
           <div className="flex flex-col space-y-2 w-full md:w-1/2">
             <label className="text-gray-600 font-semibold">Zajęcia</label>
@@ -667,38 +478,24 @@ const App = () => {
               ))}
             </select>
           </div>
-          
-          <div className="relative flex flex-col space-y-2 w-full md:w-1/2">
+          <div className="flex flex-col space-y-2 w-full md:w-1/2">
             <label className="text-gray-600 font-semibold">Grupa</label>
-            <button
-              onClick={() => setIsGroupDropdownOpen(!isGroupDropdownOpen)}
-              className="p-3 border rounded-lg shadow-sm w-full focus:ring-2 focus:ring-indigo-500 flex justify-between items-center bg-white"
+            <select
+              value={selectedFilter}
+              onChange={handleFilterChange}
+              className="p-3 border rounded-lg shadow-sm w-full focus:ring-2 focus:ring-indigo-500"
             >
-              {selectedFilter || 'Wybierz grupę'}
-              <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ml-2 transition-transform duration-200 ${isGroupDropdownOpen ? 'transform rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </button>
-            {isGroupDropdownOpen && (
-              <div className="absolute z-10 top-full mt-2 w-full rounded-lg shadow-xl bg-white border border-gray-200 max-h-60 overflow-y-auto">
-                {filterOptions.map(option => (
-                  <button
-                    key={option}
-                    onClick={() => {
-                      setSelectedFilter(option);
-                      setIsGroupDropdownOpen(false);
-                    }}
-                    className="flex items-center w-full px-4 py-3 text-left hover:bg-gray-100 transition-colors duration-200"
-                  >
-                    <span className={`w-4 h-4 rounded-full mr-3 ${getBackgroundColor(option)}`}></span>
-                    {option}
-                  </button>
-                ))}
-              </div>
-            )}
+              <option value="">Wybierz grupę</option>
+              {filterOptions.map(option => (
+                <option key={option} value={option} className={`${getBackgroundColor(option)} text-gray-800`}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
         
+        {/* Pole wyszukiwania i przycisk Dodaj uczestnika */}
         {shouldShowUsersList && (
           <div className="flex flex-col md:flex-row items-center justify-center space-y-4 md:space-y-0 md:space-x-4 mb-6">
             <input
@@ -738,15 +535,13 @@ const App = () => {
           </div>
         )}
 
+        {/* Lista uczestników w siatce - wyświetlana po wyborze filtra lub wyszukiwaniu */}
         {shouldShowUsersList && (
           filteredUsers.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
               {filteredUsers.map(user => {
                 const isPresent = userCooldowns[user.id] !== undefined;
                 const isPending = pendingAttendanceTimers[user.id] !== undefined;
-                const countdownValue = userCountdowns[user.id] || 0;
-                const progressBarWidth = (countdownValue / 5) * 100;
-                
                 const buttonClass = isPresent
                   ? 'bg-green-600 hover:bg-green-700'
                   : isPending
@@ -756,27 +551,22 @@ const App = () => {
                 return (
                   <div
                     key={user.id}
-                    className="p-6 bg-white rounded-2xl shadow-lg flex flex-col items-start space-y-4 cursor-pointer hover:bg-gray-100 transition-colors duration-200 relative overflow-hidden"
+                    className="p-6 bg-white rounded-2xl shadow-lg flex flex-col items-start space-y-4 cursor-pointer hover:bg-gray-100 transition-colors duration-200"
                     onClick={() => {
                       setSelectedUser(user);
                       setScreen('details');
-                      // Czyści komunikat o obecności po wybraniu nowego użytkownika
-                      setAttendanceMessage(null); 
                     }}
                   >
                     <span className="font-semibold text-xl text-gray-900">{user.name || 'Brak danych'}</span>
                     <button
-                        className={`w-full text-white text-md font-bold py-3 px-6 rounded-xl shadow-md transition-colors duration-200 relative z-10 ${buttonClass}`}
+                        className={`w-full text-white text-md font-bold py-3 px-6 rounded-xl shadow-md transition-colors duration-200 ${buttonClass}`}
                         onClick={(e) => {
-                          e.stopPropagation();
+                          e.stopPropagation(); // Zatrzymuje propagację zdarzenia do elementu <div>
                           recordAttendance(user);
                         }}
                     >
                         {isPending ? 'Obecny (Anuluj)' : (isPresent ? 'Obecny' : 'Zapisz obecność')}
                     </button>
-                     {isPending && (
-                       <div className="absolute bottom-0 left-0 h-1 bg-yellow-400 z-0 rounded-b-xl transition-all duration-1000 ease-linear" style={{ width: `${progressBarWidth}%` }}></div>
-                     )}
                   </div>
                 );
               })}
@@ -792,7 +582,9 @@ const App = () => {
   const DetailsScreen = () => {
     if (!selectedUser || !rawSheetData.length) return null;
 
+    // Funkcja do zbierania wszystkich oznaczeń dla wybranego użytkownika
     const getAllMarkings = (user) => {
+      // Znajdź wiersz w surowych danych po jego id
       const userRow = rawSheetData[user.id + 1];
       if (!userRow) return [];
 
@@ -820,18 +612,22 @@ const App = () => {
       return allMarkings;
     };
     
+    // Pobierz wszystkie oznaczenia dla wybranego użytkownika
     const userMarkings = getAllMarkings(selectedUser);
 
+    // Sprawdzanie statusu abonamentu
     const getSubscriptionStatus = (user, month) => {
       const userRow = rawSheetData[user.id + 1];
       const headerRow = rawSheetData[0];
       
+      // Znajdź indeks kolumny na podstawie nazwy miesiąca
       const columnIndex = headerRow.indexOf(month);
 
       if (columnIndex === -1 || !userRow || !userRow[columnIndex] || userRow[columnIndex].trim() === '') {
         return { status: 'Brak abonamentu', color: 'text-red-500' };
       }
 
+      // Jeśli kolumna ma jakąkolwiek wartość, uznajemy abonament za aktywny
       const subscriptionValue = userRow[columnIndex].trim();
       if (subscriptionValue !== '') {
         return { status: 'Aktywny', color: 'text-green-600' };
@@ -850,7 +646,6 @@ const App = () => {
             className="text-indigo-600 hover:text-indigo-800 transition-colors duration-200"
             onClick={() => {
               setScreen('home');
-              // Czyści komunikat o obecności podczas powrotu do ekranu głównego
               setAttendanceMessage(null);
             }}
           >
@@ -876,6 +671,7 @@ const App = () => {
           )}
         </div>
         
+        {/* NOWA SEKCJA: Wybór miesiąca i wyświetlanie statusu abonamentu */}
         <div className="bg-white p-8 rounded-2xl shadow-lg mt-6">
           <h2 className="text-2xl font-semibold mb-4 text-gray-800">Status abonamentu:</h2>
           <div className="flex flex-col space-y-2">
@@ -896,13 +692,10 @@ const App = () => {
         </div>
         
         <button
-          className={`w-full text-white font-bold py-4 px-8 rounded-xl shadow-lg transition-colors duration-200 text-xl relative overflow-hidden ${isPending ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+          className={`w-full text-white font-bold py-4 px-8 rounded-xl shadow-lg transition-colors duration-200 text-xl ${isPending ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}
           onClick={() => recordAttendance(selectedUser)}
         >
           {isPending ? 'Obecny (Anuluj)' : 'Zapisz obecność'}
-          {isPending && (
-             <div className="absolute bottom-0 left-0 h-1 bg-yellow-400 z-0 rounded-b-xl transition-all duration-1000 ease-linear" style={{ width: `${(userCountdowns[selectedUser.id] / 5) * 100}%` }}></div>
-          )}
         </button>
         {attendanceMessage && (
           <div className={`p-4 rounded-lg text-center font-semibold text-lg ${attendanceMessage.type === 'success' ? 'bg-green-100 text-green-700' : attendanceMessage.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
@@ -915,19 +708,8 @@ const App = () => {
   
   return (
     <div className="bg-gray-100 min-h-screen font-sans">
-      {!isAuthReady ? (
-        <div className="flex justify-center items-center h-screen">
-          <p className="text-gray-600">Przygotowywanie uwierzytelnienia...</p>
-        </div>
-      ) : user ? (
-        isAuthorized ? (
-          screen === 'home' ? <HomeScreen /> : <DetailsScreen />
-        ) : (
-          <UnauthorizedScreen />
-        )
-      ) : (
-        <LoginScreen />
-      )}
+      {screen === 'home' && <HomeScreen />}
+      {screen === 'details' && <DetailsScreen />}
     </div>
   );
 };
