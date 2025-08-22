@@ -1,7 +1,56 @@
 import { useState, useEffect, useRef } from 'react';
+import { initializeApp } from "firebase/app";
+import { 
+  getAuth, 
+  onAuthStateChanged, 
+  signInWithEmailAndPassword, 
+  signOut 
+} from "firebase/auth";
 
 // Główny komponent aplikacji
 const App = () => {
+  // NOWY STAN: Przechowuje informację o zalogowanym użytkowniku
+  const [user, setUser] = useState(null);
+  const [authError, setAuthError] = useState(null);
+  
+  // ZMIANA: Dodajemy referencje dla pól logowania
+  const emailRef = useRef(null);
+  const passwordRef = useRef(null);
+  
+  // Stan do zarządzania widokami i danymi
+  const [screen, setScreen] = useState('home');
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]); // Przechowuje wszystkich użytkowników, niezależnie od dnia
+  const [filteredUsers, setFilteredUsers] = useState([]);
+  const [selectedFilter, setSelectedFilter] = useState('');
+  const [selectedColumn, setSelectedColumn] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  // Stan do przechowywania surowych danych z arkusza
+  const [rawSheetData, setRawSheetData] = useState([]);
+  // Stan do przechowywania nagłówków kolumn z arkusza
+  const [columnHeaders, setColumnHeaders] = useState([]);
+  // Stan do przechowywania wybranego dnia tygodnia
+  const [selectedDay, setSelectedDay] = useState('');
+  const [attendanceMessage, setAttendanceMessage] = useState(null);
+  // Przechowuje czasy ostatniego kliknięcia dla KAŻDEGO użytkownika
+  const [userCooldowns, setUserCooldowns] = useState({});
+  // Stan dla zapytania wyszukiwania
+  const [searchQuery, setSearchQuery] = useState('');
+  // NOWY STAN: Wartość wyszukiwania po odczekaniu (debouncing)
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  // Nowa referencja dla dodawania uczestnika spoza bazy
+  const newParticipantRef = useRef(null);
+  // Nowy stan do kontrolowania widoczności formularza dodawania uczestnika
+  const [showAddParticipantForm, setShowAddParticipantForm] = useState(false);
+  // Przechowuje wybrany miesiąc do sprawdzania abonamentu
+  const [selectedMonth, setSelectedMonth] = useState('');
+  // Przechowuje timery dla obecności, które czekają na zapis
+  const [pendingAttendanceTimers, setPendingAttendanceTimers] = useState({});
+  // NOWY STAN: Kontroluje widoczność niestandardowej listy rozwijanej dla grup
+  const [isGroupDropdownOpen, setIsGroupDropdownOpen] = useState(false);
+  
   // Mapa indeksów miesięcy (z JavaScript Date) na polskie nazwy
   const monthIndexToName = {
     8: 'Wrzesień',
@@ -37,43 +86,47 @@ const App = () => {
     return monthIndexToName[currentMonthIndex] || 'Wrzesień';
   };
   
-  // Stan do zarządzania widokami i danymi
-  const [screen, setScreen] = useState('home');
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [users, setUsers] = useState([]);
-  const [allUsers, setAllUsers] = useState([]); // Przechowuje wszystkich użytkowników, niezależnie od dnia
-  const [filteredUsers, setFilteredUsers] = useState([]);
-  const [selectedFilter, setSelectedFilter] = useState('');
-  const [selectedColumn, setSelectedColumn] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  // Stan do przechowywania surowych danych z arkusza
-  const [rawSheetData, setRawSheetData] = useState([]);
-  // Stan do przechowywania nagłówków kolumn z arkusza
-  const [columnHeaders, setColumnHeaders] = useState([]);
-  // Stan do przechowywania wybranego dnia tygodnia
-  const [selectedDay, setSelectedDay] = useState('');
-  const [attendanceMessage, setAttendanceMessage] = useState(null);
-  // Przechowuje czasy ostatniego kliknięcia dla KAŻDEGO użytkownika
-  const [userCooldowns, setUserCooldowns] = useState({});
-  // Stan dla zapytania wyszukiwania
-  const [searchQuery, setSearchQuery] = useState('');
-  // NOWY STAN: Wartość wyszukiwania po odczekaniu (debouncing)
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
-  // Nowa referencja dla dodawania uczestnika spoza bazy
-  const newParticipantRef = useRef(null);
-  // Nowy stan do kontrolowania widoczności formularza dodawania uczestnika
-  const [showAddParticipantForm, setShowAddParticipantForm] = useState(false);
-  // Przechowuje wybrany miesiąc do sprawdzania abonamentu
-  const [selectedMonth, setSelectedMonth] = useState(getDefaultMonth());
-  // Przechowuje timery dla obecności, które czekają na zapis
-  const [pendingAttendanceTimers, setPendingAttendanceTimers] = useState({});
+  // Ustawienie domyślnego miesiąca na początku
+  useEffect(() => {
+    setSelectedMonth(getDefaultMonth());
+  }, []);
   
+  // DANE FIREBASE - ZASTĄP WŁASNYMI DANYMI Z KONSOLI FIREBASE
+  const firebaseConfig = {
+  apiKey: "AIzaSyDmXVesIeeVgQcdUnucdzCDQYz2QQDXico",
+  authDomain: "grawiapka.firebaseapp.com",
+  projectId: "grawiapka",
+  storageBucket: "grawiapka.firebasestorage.app",
+  messagingSenderId: "630484244372",
+  appId: "1:630484244372:web:745385625f35b9de056181",
+  measurementId: "G-GPP6NNHKDY"
+};
+
+  // Inicjalizacja Firebase i Autoryzacji
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  
+  // Używamy useEffect, aby nasłuchiwać zmian stanu logowania
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        // Użytkownik jest zalogowany, możemy pobierać dane
+        fetchSheetData();
+      } else {
+        // Użytkownik wylogowany, czyścimy stan
+        setIsLoading(false);
+        setRawSheetData([]);
+        setUsers([]);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   // Dane do połączenia z Google Sheets API.
   const apiKey = "AIzaSyBc3EW9VROqSoe87TP8BLkddM5Vr4BqEJg";
   const sheetId = "1SrX4suFX64c-S6qlqGT5vfY4UW8FQjCy7X9PzoXtKKI";
-  const attendanceSheetId = "1PurAUxkAw_JG1HRM-Ay-18ctryVO31nTmjePm2Lm78"; 
-  const appsScriptUrl = "https://script.google.com/macros/s/AKfycbzpCiPB4gKCnQiDg1ZUot5H_HBUrFYn6j0phHBkEtJa0-kcnX4nH4cw_G_PUJphlQpNCg/exec";
+  const appsScriptUrl = "https://script.google.com/macros/s/AKfycbzpCiPB4gKCnQiDg1ZUot5H_HBUrFYn6j0phHBkEtJa0-kcnX4nH4cw-G_PUJphlQpNCg/exec";
   const proxyScriptUrl = "https://script.google.com/macros/s/AKfycbyAtlYdp9ImSRHELyJfdC2yVZUREM1JdW50V0ZKlTQG0jSgsW3d4sA1w9WuSVUAVOUAiQ/exec"; 
   
   // Zaktualizowany zakres danych obejmujący Poniedziałek, Wtorek, Środa, Czwartek, Piątek, Sobotę i Niedzielę
@@ -104,6 +157,24 @@ const App = () => {
     'Maj': 'BG',
     'Czerwiec': 'BH',
   };
+  
+  // NOWA FUNKCJA: Obsługa logowania
+  const handleLogin = async (event) => {
+    event.preventDefault();
+    setAuthError(null);
+    try {
+      await signInWithEmailAndPassword(auth, emailRef.current.value, passwordRef.current.value);
+    } catch (error) {
+      setAuthError("Błąd logowania. Sprawdź e-mail i hasło.");
+      console.error("Authentication Error: ", error);
+    }
+  };
+
+  // NOWA FUNKCJA: Obsługa wylogowania
+  const handleLogout = async () => {
+    await signOut(auth);
+    setScreen('home');
+  };
 
   // Funkcja pobierająca dane z Google Sheets API
   const fetchSheetData = async () => {
@@ -132,8 +203,10 @@ const App = () => {
 
   // Użyj useEffect, aby pobrać dane tylko raz po załadowaniu komponentu
   useEffect(() => {
-    fetchSheetData();
-  }, []);
+    if(user) {
+      fetchSheetData();
+    }
+  }, [user]);
 
   // NOWA FUNKCJA: Przetwarza dane użytkowników dla wybranego dnia
   const processDataForDay = () => {
@@ -238,18 +311,10 @@ const App = () => {
     setFilteredUsers(tempFilteredUsers);
   }, [debouncedSearchQuery, selectedDay, selectedColumn, selectedFilter, users, allUsers]);
 
-  // Obsługa zmiany w liście rozwijanej grupy
-  const handleFilterChange = (event) => {
-    setSelectedFilter(event.target.value);
-    // Usunięto: setSearchQuery('');
-    setShowAddParticipantForm(false); // Ukryj formularz
-  };
-
   // Obsługa zmiany w liście rozwijanej zajęć
   const handleColumnChange = (event) => {
     setSelectedColumn(event.target.value);
     setSelectedFilter('');
-    // Usunięto: setSearchQuery('');
     setShowAddParticipantForm(false); // Ukryj formularz
   };
 
@@ -258,7 +323,6 @@ const App = () => {
     setSelectedDay(event.target.value);
     setSelectedColumn('');
     setSelectedFilter('');
-    // Usunięto: setSearchQuery('');
     setShowAddParticipantForm(false); // Ukryj formularz
   };
 
@@ -420,6 +484,39 @@ const App = () => {
     }
   };
 
+  const LoginScreen = () => {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-sm text-center">
+          <h1 className="text-3xl font-bold text-gray-800 mb-6">Logowanie</h1>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <input
+              type="email"
+              ref={emailRef}
+              placeholder="E-mail"
+              className="w-full p-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500"
+              required
+            />
+            <input
+              type="password"
+              ref={passwordRef}
+              placeholder="Hasło"
+              className="w-full p-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500"
+              required
+            />
+            <button
+              type="submit"
+              className="w-full bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl shadow-md hover:bg-indigo-700 transition-colors duration-200"
+            >
+              Zaloguj
+            </button>
+            {authError && <p className="text-red-500 text-sm mt-2">{authError}</p>}
+          </form>
+        </div>
+      </div>
+    );
+  };
+
   const HomeScreen = () => {
     if (isLoading) {
       return (
@@ -445,7 +542,15 @@ const App = () => {
 
     return (
       <div className="p-8 space-y-6">
-        <h1 className="text-4xl font-extrabold text-center text-gray-800 mb-6">Uczestnicy zajęć</h1>
+        <div className="flex justify-between items-center mb-6">
+            <h1 className="text-4xl font-extrabold text-gray-800">Uczestnicy zajęć</h1>
+            <button
+                onClick={handleLogout}
+                className="bg-red-500 text-white py-2 px-4 rounded-lg shadow-md hover:bg-red-600 transition-colors duration-200"
+            >
+                Wyloguj
+            </button>
+        </div>
         
         {/* NOWY UKŁAD PRZYCISKÓW */}
         {/* Przycisk Dzień */}
@@ -478,20 +583,36 @@ const App = () => {
               ))}
             </select>
           </div>
-          <div className="flex flex-col space-y-2 w-full md:w-1/2">
+          
+          {/* NOWY, CUSTOMOWY KOMPONENT DROPDOWN DLA GRUPY */}
+          <div className="relative flex flex-col space-y-2 w-full md:w-1/2">
             <label className="text-gray-600 font-semibold">Grupa</label>
-            <select
-              value={selectedFilter}
-              onChange={handleFilterChange}
-              className="p-3 border rounded-lg shadow-sm w-full focus:ring-2 focus:ring-indigo-500"
+            <button
+              onClick={() => setIsGroupDropdownOpen(!isGroupDropdownOpen)}
+              className="p-3 border rounded-lg shadow-sm w-full focus:ring-2 focus:ring-indigo-500 flex justify-between items-center bg-white"
             >
-              <option value="">Wybierz grupę</option>
-              {filterOptions.map(option => (
-                <option key={option} value={option} className={`${getBackgroundColor(option)} text-gray-800`}>
-                  {option}
-                </option>
-              ))}
-            </select>
+              {selectedFilter || 'Wybierz grupę'}
+              <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ml-2 transition-transform duration-200 ${isGroupDropdownOpen ? 'transform rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+            {isGroupDropdownOpen && (
+              <div className="absolute z-10 top-full mt-2 w-full rounded-lg shadow-xl bg-white border border-gray-200 max-h-60 overflow-y-auto">
+                {filterOptions.map(option => (
+                  <button
+                    key={option}
+                    onClick={() => {
+                      setSelectedFilter(option);
+                      setIsGroupDropdownOpen(false);
+                    }}
+                    className="flex items-center w-full px-4 py-3 text-left hover:bg-gray-100 transition-colors duration-200"
+                  >
+                    <span className={`w-4 h-4 rounded-full mr-3 ${getBackgroundColor(option)}`}></span>
+                    {option}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         
@@ -708,8 +829,8 @@ const App = () => {
   
   return (
     <div className="bg-gray-100 min-h-screen font-sans">
-      {screen === 'home' && <HomeScreen />}
-      {screen === 'details' && <DetailsScreen />}
+      {!user ? <LoginScreen /> : screen === 'home' && <HomeScreen />}
+      {user && screen === 'details' && <DetailsScreen />}
     </div>
   );
 };
