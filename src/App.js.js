@@ -83,12 +83,12 @@ const App = () => {
   // Mapowanie dni tygodnia na zakresy indeksów kolumn, włącznie z indeksem dla kolumny z nazwiskami
   const dayRanges = {
     'Poniedziałek': { nameIndex: 0, dataRange: [1, 6] },
-    'Wtorek': { nameIndex: 7, dataRange: [8, 13] },
-    'Środa': { nameIndex: 14, dataRange: [15, 20] },
-    'Czwartek': { nameIndex: 21, dataRange: [22, 27] },
-    'Piątek': { nameIndex: 28, dataRange: [29, 34] },
-    'Sobota': { nameIndex: 35, dataRange: [36, 41] },
-    'Niedziela': { nameIndex: 42, dataRange: [43, 46] },
+    'Wtorek': { nameIndex: 0, dataRange: [8, 13] },
+    'Środa': { nameIndex: 0, dataRange: [15, 20] },
+    'Czwartek': { nameIndex: 0, dataRange: [22, 27] },
+    'Piątek': { nameIndex: 0, dataRange: [29, 34] },
+    'Sobota': { nameIndex: 0, dataRange: [36, 41] },
+    'Niedziela': { nameIndex: 0, dataRange: [43, 46] },
   };
 
   // Mapa miesięcy i ich kolumn, podana przez Ciebie
