@@ -78,31 +78,31 @@ const App = () => {
   
   // Zaktualizowany zakres danych obejmujący Poniedziałek, Wtorek, Środa, Czwartek, Piątek, Sobotę i Niedzielę
   // WAŻNA ZMIANA: Zakres danych został rozszerzony do kolumny BH, aby uwzględnić wszystkie miesiące
-  const range = "Baza danych!A:BH"; 
+  const range = "Baza danych!A:BC"; 
 
   // Mapowanie dni tygodnia na zakresy indeksów kolumn, włącznie z indeksem dla kolumny z nazwiskami
   const dayRanges = {
     'Poniedziałek': { nameIndex: 0, dataRange: [1, 6] },
-    'Wtorek': { nameIndex: 0, dataRange: [8, 13] },
-    'Środa': { nameIndex: 0, dataRange: [15, 20] },
-    'Czwartek': { nameIndex: 0, dataRange: [22, 27] },
-    'Piątek': { nameIndex: 0, dataRange: [29, 34] },
-    'Sobota': { nameIndex: 0, dataRange: [36, 41] },
-    'Niedziela': { nameIndex: 0, dataRange: [43, 46] },
+    'Wtorek': { nameIndex: 0, dataRange: [7, 12] },
+    'Środa': { nameIndex: 0, dataRange: [13, 18] },
+    'Czwartek': { nameIndex: 0, dataRange: [19, 24] },
+    'Piątek': { nameIndex: 0, dataRange: [25, 30] },
+    'Sobota': { nameIndex: 0, dataRange: [31, 36] },
+    'Niedziela': { nameIndex: 0, dataRange: [37, 40] },
   };
 
   // Mapa miesięcy i ich kolumn, podana przez Ciebie
   const monthColumns = {
-    'Wrzesień': 'AY',
-    'Październik': 'AZ',
-    'Listopad': 'BA',
-    'Grudzień': 'BB',
-    'Styczeń': 'BC',
-    'Luty': 'BD',
-    'Marzec': 'BE',
-    'Kwiecień': 'BF',
-    'Maj': 'BG',
-    'Czerwiec': 'BH',
+    'Wrzesień': 'AT',
+    'Październik': 'AU',
+    'Listopad': 'AV',
+    'Grudzień': 'AW',
+    'Styczeń': 'AX',
+    'Luty': 'AY',
+    'Marzec': 'AZ',
+    'Kwiecień': 'BA',
+    'Maj': 'BB',
+    'Czerwiec': 'BC',
   };
 
   // Funkcja pobierająca dane z Google Sheets API
