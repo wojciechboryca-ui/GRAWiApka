@@ -88,7 +88,7 @@ const App = () => {
     'Czwartek': { nameIndex: 21, dataRange: [22, 27] },
     'Piątek': { nameIndex: 28, dataRange: [29, 34] },
     'Sobota': { nameIndex: 35, dataRange: [36, 41] },
-    'Niedziela': { nameIndex: 42, dataRange: [43, 48] },
+    'Niedziela': { nameIndex: 42, dataRange: [43, 46] },
   };
 
   // Mapa miesięcy i ich kolumn, podana przez Ciebie
