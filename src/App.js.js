@@ -68,12 +68,24 @@ const App = () => {
   const [selectedMonth, setSelectedMonth] = useState(getDefaultMonth());
   // Przechowuje timery dla obecności, które czekają na zapis
   const [pendingAttendanceTimers, setPendingAttendanceTimers] = useState({});
+  // ZMIANA: Przechowuje status obecności dla konkretnej sesji (Dzień, Zajęcia, Grupa)
+  // Teraz obiekt przechowuje również znacznik czasu (timestamp)
+  const [sessionAttendanceStatus, setSessionAttendanceStatus] = useState(() => {
+    try {
+      // Ładuje status obecności z localStorage przy pierwszym renderowaniu
+      const storedStatus = localStorage.getItem('sessionAttendanceStatus');
+      return storedStatus ? JSON.parse(storedStatus) : {};
+    } catch (error) {
+      console.error("Failed to load attendance status from localStorage:", error);
+      return {};
+    }
+  });
   
   // Dane do połączenia z Google Sheets API.
   const apiKey = "AIzaSyBc3EW9VROqSoe87TP8BLkddM5Vr4BqEJg";
   const sheetId = "1SrX4suFX64c-S6qlqGT5vfY4UW8FQjCy7X9PzoXtKKI";
   const attendanceSheetId = "1PurAUxkAw_JG1HRM-Ay-18ctryVO31nTmjePm2Lm78"; 
-  const appsScriptUrl = "https://script.google.com/macros/s/AKfycbzpCiPB4gKCnQiDg1ZUot5H_HBUrFYn6j0phHBkEtJa0-kcnX4nH4cw_G_PUJphlQpNCg/exec";
+  const appsScriptUrl = "https://script.google.com/macros/s/AKfycbzpCiPB4gKCnQiDg1ZUot5H_HBUrFYn6j0phHBkEtJa0-kcnX4nH4cw_G_PUphlQpNCg/exec";
   const proxyScriptUrl = "https://script.google.com/macros/s/AKfycbyAtlYdp9ImSRHELyJfdC2yVZUREM1JdW50V0ZKlTQG0jSgsW3d4sA1w9WuSVUAVOUAiQ/exec"; 
   
   // Zaktualizowany zakres danych obejmujący Poniedziałek, Wtorek, Środa, Czwartek, Piątek, Sobotę i Niedzielę
@@ -312,6 +324,8 @@ const App = () => {
       return;
     }
     
+    // ZMIANA: Tworzymy unikalny klucz na podstawie ID, dnia, zajęć i grupy
+    const attendanceKey = `${user.id}-${selectedDay}-${selectedColumn}-${selectedFilter}`;
     const isPending = pendingAttendanceTimers[user.id];
     
     if (isPending) {
@@ -349,9 +363,13 @@ const App = () => {
             console.error('Błąd zapisu obecności:', errorText);
             setAttendanceMessage({ type: 'error', text: `Nie udało się zapisać obecności. Kod błędu: ${response.status}. Szczegóły: ${errorText}.` });
           } else {
-            // Zaktualizuj stan po udanym zapisie
+            // ZMIANA: Zapisz stan obecności dla Dnia, Zajęć i Grupy
+            // Zapisz obiekt z flagą statusu i znacznikiem czasu
             setAttendanceMessage({ type: 'success', text: `Obecność dla ${user.name} została zapisana!` });
-            setUserCooldowns(prev => ({ ...prev, [user.id]: now }));
+            setSessionAttendanceStatus(prev => ({
+              ...prev,
+              [attendanceKey]: { status: true, timestamp: now },
+            }));
           }
         } catch (error) {
           console.error('Błąd zapisu obecności:', error);
@@ -419,6 +437,40 @@ const App = () => {
       setAttendanceMessage({ type: 'error', text: 'Wystąpił błąd podczas zapisywania obecności. Sprawdź połączenie z internetem lub poprawność adresu URL.' });
     }
   };
+
+  // NOWY HOOK: Zapisuje status obecności w localStorage przy każdej zmianie stanu
+  useEffect(() => {
+    try {
+      localStorage.setItem('sessionAttendanceStatus', JSON.stringify(sessionAttendanceStatus));
+    } catch (error) {
+      console.error("Failed to save attendance status to localStorage:", error);
+    }
+  }, [sessionAttendanceStatus]);
+
+  // NOWY HOOK: Resetuje status "Obecny" po 1 godzinie
+  useEffect(() => {
+    // Interwał sprawdzający co minutę
+    const cleanupInterval = setInterval(() => {
+      setSessionAttendanceStatus(prevStatus => {
+        const now = new Date().getTime();
+        const oneHour = 60 * 60 * 1000; // 1 godzina w milisekundach
+        const newStatus = {};
+        
+        // Iteruj po wszystkich zapisanych statusach
+        for (const key in prevStatus) {
+          const entry = prevStatus[key];
+          // Jeśli status jest starszy niż 1 godzina, nie dodawaj go do nowego stanu
+          if (now - entry.timestamp <= oneHour) {
+            newStatus[key] = entry;
+          }
+        }
+        return newStatus;
+      });
+    }, 60 * 1000); // Co 1 minutę
+    
+    // Funkcja czyszcząca interwał po odmontowaniu komponentu
+    return () => clearInterval(cleanupInterval);
+  }, []); // Pusta tablica zależności sprawia, że hook uruchomi się tylko raz
 
   const HomeScreen = () => {
     if (isLoading) {
@@ -540,7 +592,10 @@ const App = () => {
           filteredUsers.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
               {filteredUsers.map(user => {
-                const isPresent = userCooldowns[user.id] !== undefined;
+                // ZMIANA: Sprawdzenie obecności na podstawie kombinacji ID, dnia, zajęć i grupy
+                const attendanceKey = `${user.id}-${selectedDay}-${selectedColumn}-${selectedFilter}`;
+                // Sprawdź, czy status istnieje i ma flagę 'status: true'
+                const isPresent = sessionAttendanceStatus[attendanceKey]?.status;
                 const isPending = pendingAttendanceTimers[user.id] !== undefined;
                 const buttonClass = isPresent
                   ? 'bg-green-600 hover:bg-green-700'
@@ -638,6 +693,15 @@ const App = () => {
 
     const subscriptionStatus = getSubscriptionStatus(selectedUser, selectedMonth);
     const isPending = pendingAttendanceTimers[selectedUser.id] !== undefined;
+    // ZMIANA: Sprawdzenie obecności na podstawie kombinacji ID, dnia, zajęć i grupy
+    const attendanceKey = `${selectedUser.id}-${selectedDay}-${selectedColumn}-${selectedFilter}`;
+    const isPresent = sessionAttendanceStatus[attendanceKey]?.status;
+    
+    const buttonClass = isPresent
+      ? 'bg-green-600 hover:bg-green-700'
+      : isPending
+      ? 'bg-yellow-500 hover:bg-yellow-600'
+      : 'bg-indigo-600 hover:bg-indigo-700';
 
     return (
       <div className="p-8 space-y-6 max-w-4xl mx-auto">
@@ -692,7 +756,7 @@ const App = () => {
         </div>
         
         <button
-          className={`w-full text-white font-bold py-4 px-8 rounded-xl shadow-lg transition-colors duration-200 text-xl ${isPending ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+          className={`w-full text-white font-bold py-4 px-8 rounded-xl shadow-lg transition-colors duration-200 text-xl ${buttonClass}`}
           onClick={() => recordAttendance(selectedUser)}
         >
           {isPending ? 'Obecny (Anuluj)' : 'Zapisz obecność'}
