@@ -250,19 +250,25 @@ const App = () => {
     setFilteredUsers(tempFilteredUsers);
   }, [debouncedSearchQuery, selectedDay, selectedColumn, selectedFilter, users, allUsers]);
 
+  // Funkcja do obsługi zmiany w polu wyszukiwania
+  const handleSearchChange = (e) => {
+    setSearchQuery(e.target.value);
+    // Wyczyść stan filtrów i obecności, aby uniknąć błędnego wyświetlania po zmianie trybu na wyszukiwanie
+    setSelectedColumn('');
+    setSelectedFilter('');
+  };
+
   // Obsługa zmiany w liście rozwijanej grupy
   const handleFilterChange = (event) => {
     setSelectedFilter(event.target.value);
-    // Usunięto: setSearchQuery('');
-    setShowAddParticipantForm(false); // Ukryj formularz
+    setShowAddParticipantForm(false);
   };
 
   // Obsługa zmiany w liście rozwijanej zajęć
   const handleColumnChange = (event) => {
     setSelectedColumn(event.target.value);
     setSelectedFilter('');
-    // Usunięto: setSearchQuery('');
-    setShowAddParticipantForm(false); // Ukryj formularz
+    setShowAddParticipantForm(false);
   };
 
   // Obsługa zmiany w liście rozwijanej dnia
@@ -270,8 +276,7 @@ const App = () => {
     setSelectedDay(event.target.value);
     setSelectedColumn('');
     setSelectedFilter('');
-    // Usunięto: setSearchQuery('');
-    setShowAddParticipantForm(false); // Ukryj formularz
+    setShowAddParticipantForm(false);
   };
 
   // Zaktualizowana funkcja pobierająca unikalne wartości dla drugiej listy rozwijanej
@@ -554,7 +559,7 @@ const App = () => {
               type="text"
               placeholder="Wyszukaj z bazy zapisanych"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={handleSearchChange}
               className="p-3 border rounded-lg shadow-sm w-full focus:ring-2 focus:ring-indigo-500"
             />
             {selectedDay && selectedColumn && selectedFilter && (
