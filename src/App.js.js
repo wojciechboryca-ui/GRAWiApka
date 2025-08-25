@@ -80,15 +80,25 @@ const App = () => {
       return {};
     }
   });
+
+  // NOWY STAN: Przechowuje podświetlone sesje w localStorage, wraz z czasem ich podświetlenia
+  const [sessionHighlights, setSessionHighlights] = useState(() => {
+    try {
+      const storedHighlights = localStorage.getItem('sessionHighlights');
+      return storedHighlights ? JSON.parse(storedHighlights) : {};
+    } catch (error) {
+      console.error("Failed to load session highlights from localStorage:", error);
+      return {};
+    }
+  });
   
   // Dane do połączenia z Google Sheets API.
   const apiKey = "AIzaSyBc3EW9VROqSoe87TP8BLkddM5Vr4BqEJg";
   const sheetId = "1SrX4suFX64c-S6qlqGT5vfY4UW8FQjCy7X9PzoXtKKI";
-  const attendanceSheetId = "1PurAUxkAw_JG1HRM-Ay-18ctryVO31nTmjePm2Lm78"; 
   const appsScriptUrl = "https://script.google.com/macros/s/AKfycbzpCiPB4gKCnQiDg1ZUot5H_HBUrFYn6j0phHBkEtJa0-kcnX4nH4cw_G_PUphlQpNCg/exec";
   const proxyScriptUrl = "https://script.google.com/macros/s/AKfycbyAtlYdp9ImSRHELyJfdC2yVZUREM1JdW50V0ZKlTQG0jSgsW3d4sA1w9WuSVUAVOUAiQ/exec"; 
   
-  // Zaktualizowany zakres danych obejmujący Poniedziałek, Wtorek, Środa, Czwartek, Piątek, Sobotę i Niedzielę
+  // Zaktualizowany zakres danych obejmujący Poniedziałek, Wtorek, Środa, Czwartek, Piątek, Sobota i Niedzielę
   // WAŻNA ZMIANA: Zakres danych został rozszerzony do kolumny BH, aby uwzględnić wszystkie miesiące
   const range = "Baza danych!A:BH"; 
 
@@ -132,7 +142,7 @@ const App = () => {
         // Zapisz surowe dane
         setRawSheetData(data.values);
       } else {
-        setError("Błąd podczas ładowania danych. Upewnij się, że ID arkusza i klucz API są poprawne oraz że arkusz nie jest pusty.");
+        setError("Błąd podczas ładowania danych. Upewnij się, że ID arkusza i klucz API są poprawny oraz że arkusz nie jest pusty.");
       }
     } catch (err) {
       console.error("Nie udało się pobrać danych:", err);
@@ -262,6 +272,7 @@ const App = () => {
   const handleFilterChange = (event) => {
     setSelectedFilter(event.target.value);
     setShowAddParticipantForm(false);
+    setSearchQuery(''); 
   };
 
   // Obsługa zmiany w liście rozwijanej zajęć
@@ -269,6 +280,7 @@ const App = () => {
     setSelectedColumn(event.target.value);
     setSelectedFilter('');
     setShowAddParticipantForm(false);
+    setSearchQuery('');
   };
 
   // Obsługa zmiany w liście rozwijanej dnia
@@ -277,6 +289,7 @@ const App = () => {
     setSelectedColumn('');
     setSelectedFilter('');
     setShowAddParticipantForm(false);
+    setSearchQuery('');
   };
 
   // Zaktualizowana funkcja pobierająca unikalne wartości dla drugiej listy rozwijanej
@@ -321,6 +334,25 @@ const App = () => {
         return 'bg-yellow-400'; // Żółty dla pozostałych
     }
   };
+
+  // Sprawdzanie statusu abonamentu - przeniesione do osobnej funkcji
+  const getSubscriptionStatus = (user) => {
+      const userRow = rawSheetData[user.id + 1];
+      const headerRow = rawSheetData[0];
+      
+      const columnIndex = headerRow.indexOf(selectedMonth);
+
+      if (columnIndex === -1 || !userRow || !userRow[columnIndex] || userRow[columnIndex].trim() === '') {
+        return { status: 'Brak abonamentu', color: 'text-red-500', bgColor: 'bg-gray-200' };
+      }
+
+      const subscriptionValue = userRow[columnIndex].trim();
+      if (subscriptionValue !== '') {
+        return { status: 'Aktywny', color: 'text-green-600', bgColor: 'bg-green-200' };
+      }
+
+      return { status: 'Brak abonamentu', color: 'text-red-500', bgColor: 'bg-gray-200' };
+    };
 
   // Zmieniona funkcja - teraz przyjmuje użytkownika jako argument
   const recordAttendance = (user) => {
@@ -477,6 +509,48 @@ const App = () => {
     return () => clearInterval(cleanupInterval);
   }, []); // Pusta tablica zależności sprawia, że hook uruchomi się tylko raz
 
+  // NOWA FUNKCJA: Przekierowuje na ekran główny i ustawia filtry
+  const handleSelectGroup = (day, session, group) => {
+    // Zapisz znacznik czasu podświetlenia do localStorage
+    const highlightKey = `${selectedUser.id}-${day}-${session}-${group}`;
+    const now = new Date().getTime();
+    setSessionHighlights(prev => {
+      const newHighlights = { ...prev, [highlightKey]: now };
+      localStorage.setItem('sessionHighlights', JSON.stringify(newHighlights));
+      return newHighlights;
+    });
+
+    setSelectedDay(day);
+    setSelectedColumn(session);
+    setSelectedFilter(group);
+    setScreen('home'); // Wróć do ekranu głównego
+    setSearchQuery('');
+    setAttendanceMessage(null);
+  };
+  
+  // NOWY HOOK: Czyści przestarzałe podświetlenia co 5 minut
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      setSessionHighlights(prevHighlights => {
+        const now = new Date().getTime();
+        const fiveHours = 5 * 60 * 60 * 1000; // 5 godzin w milisekundach
+        const newHighlights = {};
+
+        for (const key in prevHighlights) {
+          const timestamp = prevHighlights[key];
+          if (now - timestamp <= fiveHours) {
+            newHighlights[key] = timestamp;
+          }
+        }
+        // Zapisz zaktualizowany stan do localStorage
+        localStorage.setItem('sessionHighlights', JSON.stringify(newHighlights));
+        return newHighlights;
+      });
+    }, 5 * 60 * 1000); // Sprawdzaj co 5 minut
+
+    return () => clearInterval(cleanupInterval);
+  }, []); // Uruchom tylko raz na początku
+
   const HomeScreen = () => {
     if (isLoading) {
       return (
@@ -498,7 +572,7 @@ const App = () => {
     const filterOptions = getFilterOptions(selectedColumn);
     
     // ZMIENIONA LOGIKA: Pokaż listę użytkowników tylko, gdy wybrana jest grupa lub trwa wyszukiwanie
-    const shouldShowUsersList = selectedFilter || searchQuery;
+    const shouldShowUsersList = selectedFilter || debouncedSearchQuery;
 
     return (
       <div className="p-8 space-y-6">
@@ -552,43 +626,50 @@ const App = () => {
           </div>
         </div>
         
-        {/* Pole wyszukiwania i przycisk Dodaj uczestnika */}
-        {shouldShowUsersList && (
-          <div className="flex flex-col md:flex-row items-center justify-center space-y-4 md:space-y-0 md:space-x-4 mb-6">
-            <input
-              type="text"
-              placeholder="Wyszukaj z bazy zapisanych"
-              value={searchQuery}
-              onChange={handleSearchChange}
-              className="p-3 border rounded-lg shadow-sm w-full focus:ring-2 focus:ring-indigo-500"
-            />
-            {selectedDay && selectedColumn && selectedFilter && (
-              <div className="w-full">
-                {!showAddParticipantForm ? (
-                  <button
-                    onClick={() => setShowAddParticipantForm(true)}
-                    className="w-full bg-orange-500 text-white font-bold py-3 px-6 rounded-xl shadow-md hover:bg-orange-600 transition-colors duration-200 mt-4"
-                  >
-                    Dodaj NOWEGO uczestnika
-                  </button>
-                ) : (
-                  <div className="flex flex-col space-y-2 mt-4">
-                    <input
-                      type="text"
-                      placeholder="Wpisz nazwisko, imię i rok ur."
-                      ref={newParticipantRef}
-                      className="p-3 border rounded-lg shadow-sm w-full focus:ring-2 focus:ring-orange-500"
-                    />
-                    <button
-                      onClick={recordNewParticipantAttendance}
-                      className="w-full bg-orange-500 text-white font-bold py-3 px-6 rounded-xl shadow-md hover:bg-orange-600 transition-colors duration-200"
-                    >
-                      Zatwierdź
-                    </button>
-                  </div>
-                )}
+        {/* NOWOŚĆ: Pole wyszukiwania jest teraz zawsze widoczne */}
+        <div className="flex flex-col mb-4">
+          <input
+            type="text"
+            placeholder="Wyszukaj z bazy danych"
+            value={searchQuery}
+            onChange={handleSearchChange}
+            className="p-3 border rounded-lg shadow-sm w-full focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+        
+        {/* Przycisk Dodaj NOWEGO uczestnika i formularz, widoczne tylko po wybraniu zajęć i grupy */}
+        {selectedDay && selectedColumn && selectedFilter && (
+          <div className="w-full">
+            {!showAddParticipantForm ? (
+              <button
+                onClick={() => setShowAddParticipantForm(true)}
+                className="w-full bg-orange-500 text-white font-bold py-3 px-6 rounded-xl shadow-md hover:bg-orange-600 transition-colors duration-200"
+              >
+                Dodaj NOWEGO uczestnika
+              </button>
+            ) : (
+              <div className="flex flex-col space-y-2 mt-4">
+                <input
+                  type="text"
+                  placeholder="Wpisz nazwisko, imię i rok ur."
+                  ref={newParticipantRef}
+                  className="p-3 border rounded-lg shadow-sm w-full focus:ring-2 focus:ring-orange-500"
+                />
+                <button
+                  onClick={recordNewParticipantAttendance}
+                  className="w-full bg-orange-500 text-white font-bold py-3 px-6 rounded-xl shadow-md hover:bg-orange-600 transition-colors duration-200"
+                >
+                  Zatwierdź
+                </button>
               </div>
             )}
+          </div>
+        )}
+        
+        {/* Licznik uczestników - NOWOŚĆ */}
+        {shouldShowUsersList && (
+          <div className="text-center p-4">
+            <h2 className="text-2xl font-bold text-gray-800">Liczba uczestników: {filteredUsers.length}</h2>
           </div>
         )}
 
@@ -597,11 +678,18 @@ const App = () => {
           filteredUsers.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
               {filteredUsers.map(user => {
-                // ZMIANA: Sprawdzenie obecności na podstawie kombinacji ID, dnia, zajęć i grupy
-                const attendanceKey = `${user.id}-${selectedDay}-${selectedColumn}-${selectedFilter}`;
-                // Sprawdź, czy status istnieje i ma flagę 'status: true'
-                const isPresent = sessionAttendanceStatus[attendanceKey]?.status;
+                // Sprawdzenie statusu abonamentu
+                const subscriptionStatus = getSubscriptionStatus(user);
+                // NOWA LOGIKA: Sprawdzenie, czy podświetlenie istnieje w localStorage i czy jest starsze niż 5 godzin
+                const highlightKey = `${user.id}-${selectedDay}-${selectedColumn}-${selectedFilter}`;
+                const isHighlighted = sessionHighlights[highlightKey] && 
+                                      new Date().getTime() - sessionHighlights[highlightKey] <= 5 * 60 * 60 * 1000;
+                
+                const backgroundClass = isHighlighted ? 'bg-green-300 border-2 border-green-600' : subscriptionStatus.bgColor;
+                
                 const isPending = pendingAttendanceTimers[user.id] !== undefined;
+                const attendanceKey = `${user.id}-${selectedDay}-${selectedColumn}-${selectedFilter}`;
+                const isPresent = sessionAttendanceStatus[attendanceKey]?.status;
                 const buttonClass = isPresent
                   ? 'bg-green-600 hover:bg-green-700'
                   : isPending
@@ -617,7 +705,8 @@ const App = () => {
                       setScreen('details');
                     }}
                   >
-                    <span className="font-semibold text-xl text-gray-900">{user.name || 'Brak danych'}</span>
+                    {/* ZMIANA: Użycie dynamicznej klasy dla tła */}
+                    <span className={`font-semibold text-xl text-gray-900 w-full px-4 py-2 rounded-xl text-center ${backgroundClass}`}>{user.name || 'Brak danych'}</span>
                     <button
                         className={`w-full text-white text-md font-bold py-3 px-6 rounded-xl shadow-md transition-colors duration-200 ${buttonClass}`}
                         onClick={(e) => {
@@ -676,12 +765,12 @@ const App = () => {
     const userMarkings = getAllMarkings(selectedUser);
 
     // Sprawdzanie statusu abonamentu
-    const getSubscriptionStatus = (user, month) => {
+    const getSubscriptionStatus = (user) => {
       const userRow = rawSheetData[user.id + 1];
       const headerRow = rawSheetData[0];
       
       // Znajdź indeks kolumny na podstawie nazwy miesiąca
-      const columnIndex = headerRow.indexOf(month);
+      const columnIndex = headerRow.indexOf(selectedMonth);
 
       if (columnIndex === -1 || !userRow || !userRow[columnIndex] || userRow[columnIndex].trim() === '') {
         return { status: 'Brak abonamentu', color: 'text-red-500' };
@@ -696,7 +785,7 @@ const App = () => {
       return { status: 'Brak abonamentu', color: 'text-red-500' };
     };
 
-    const subscriptionStatus = getSubscriptionStatus(selectedUser, selectedMonth);
+    const subscriptionStatus = getSubscriptionStatus(selectedUser);
     const isPending = pendingAttendanceTimers[selectedUser.id] !== undefined;
     // ZMIANA: Sprawdzenie obecności na podstawie kombinacji ID, dnia, zajęć i grupy
     const attendanceKey = `${selectedUser.id}-${selectedDay}-${selectedColumn}-${selectedFilter}`;
@@ -731,12 +820,19 @@ const App = () => {
               {userMarkings.map((marking, index) => (
                 <li key={index} className="text-gray-700 text-lg font-medium">
                   <span className="font-bold">{marking.day}, {marking.session}:</span> 
-                  <span className={`inline-block ml-3 px-3 py-1 text-md rounded-lg shadow-sm ${getBackgroundColor(marking.status)} text-gray-800`}>{marking.status}</span>
+                  {/* ZMIANA: Dodanie onClick do symbolu grupy, aby ustawiał filtry i wracał na ekran główny */}
+                  <span
+                    className={`inline-block ml-3 px-3 py-1 text-md rounded-lg shadow-sm ${getBackgroundColor(marking.status)} text-gray-800 cursor-pointer hover:shadow-md transition-shadow duration-200`}
+                    onClick={() => handleSelectGroup(marking.day, marking.session, marking.status)}
+                  >
+                    {marking.status}
+                  </span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-gray-500 text-lg">Brak zapisanych oznaczeń obecności.</p>
+            // ZMIANA: Zaktualizowany tekst komunikatu
+            <p className="text-gray-500 text-lg">Nie wybrano żadnej grupy.</p>
           )}
         </div>
         
@@ -778,7 +874,7 @@ const App = () => {
   return (
     <div className="bg-gray-100 min-h-screen font-sans">
       {screen === 'home' && <HomeScreen />}
-      {screen === 'details' && <DetailsScreen />}
+      {screen === 'details' && <DetailsScreen handleSelectGroup={handleSelectGroup} />}
     </div>
   );
 };
