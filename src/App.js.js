@@ -16,7 +16,7 @@ const App = () => {
     5: 'Czerwiec',
   };
   
-  // NOWA TABLICA Z POPRAWNĄ KOLEJNOŚCIĄ MIESIĘCY
+  // TABLICA Z POPRAWNĄ KOLEJNOŚCIĄ MIESIĘCY
   const orderedMonths = [
     'Wrzesień',
     'Październik',
@@ -37,6 +37,13 @@ const App = () => {
     return monthIndexToName[currentMonthIndex] || 'Wrzesień';
   };
   
+  // NOWA FUNKCJA: Ustala domyślny dzień tygodnia na podstawie bieżącej daty
+  const getDefaultDay = () => {
+    const daysInPolish = ['Niedziela', 'Poniedziałek', 'Wtorek', 'Środa', 'Czwartek', 'Piątek', 'Sobota'];
+    const currentDayIndex = new Date().getDay();
+    return daysInPolish[currentDayIndex];
+  };
+
   // Stan do zarządzania widokami i danymi
   const [screen, setScreen] = useState('home');
   const [selectedUser, setSelectedUser] = useState(null);
@@ -51,8 +58,8 @@ const App = () => {
   const [rawSheetData, setRawSheetData] = useState([]);
   // Stan do przechowywania nagłówków kolumn z arkusza
   const [columnHeaders, setColumnHeaders] = useState([]);
-  // Stan do przechowywania wybranego dnia tygodnia
-  const [selectedDay, setSelectedDay] = useState('');
+  // ZMIANA: Stan dla wybranego dnia jest teraz inicjowany aktualnym dniem tygodnia
+  const [selectedDay, setSelectedDay] = useState(getDefaultDay());
   const [attendanceMessage, setAttendanceMessage] = useState(null);
   // Przechowuje czasy ostatniego kliknięcia dla KAŻDEGO użytkownika
   const [userCooldowns, setUserCooldowns] = useState({});
@@ -69,7 +76,7 @@ const App = () => {
   // Przechowuje timery dla obecności, które czekają na zapis
   const [pendingAttendanceTimers, setPendingAttendanceTimers] = useState({});
   // ZMIANA: Przechowuje status obecności dla konkretnej sesji (Dzień, Zajęcia, Grupa)
-  // Teraz obiekt przechowuje również znacznik czasu (timestamp)
+  // Naprawiono błąd składni, `useState` przyjmuje bezpośrednio wartość początkową.
   const [sessionAttendanceStatus, setSessionAttendanceStatus] = useState(() => {
     try {
       // Ładuje status obecności z localStorage przy pierwszym renderowaniu
